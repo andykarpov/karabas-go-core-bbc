@@ -82,6 +82,12 @@ entity bbc_micro_core is
         UseOrigKeyboard        : boolean := false;
         UseT65Core             : boolean := false;
         UseAlanDCore           : boolean := true;
+        -- karabas: both CPUs at once, T65 for the Model B and AlanD for the Master, picked by m128_mode
+        -- (as Welsh71/BBCMicro.Alternate_MiSTer); UseT65Core / UseAlanDCore are not used then
+        KgDualCpu              : boolean := false;
+        -- karabas: the keyboard bytes (PS/2 set 2) come from ext_kbd_data / ext_kbd_valid (kg_mcu2),
+        -- not from the PS/2 pins: no handshake with a device, no LED commands
+        KgExtKeyboard          : boolean := false;
         OverrideCMOS           : boolean := true   -- Overide CMOS/RTC mode settings with keyb_dip
     );
     port (
@@ -246,6 +252,10 @@ entity bbc_micro_core is
 
         -- Master Mode
         m128_mode      : in    std_logic;
+
+        -- karabas: keyboard bytes (KgExtKeyboard)
+        ext_kbd_data   : in    std_logic_vector(7 downto 0) := (others => '0');
+        ext_kbd_valid  : in    std_logic := '0';
 
         -- Copro
         --    On the Model B these are used directly to control the tube register visibility
@@ -658,6 +668,17 @@ signal cpu_di           :   std_logic_vector(7 downto 0);
 signal cpu_do           :   std_logic_vector(7 downto 0);
 signal cpu_addr_us      :   unsigned (15 downto 0);
 signal cpu_dout_us      :   unsigned (7 downto 0);
+-- karabas: KgDualCpu
+signal cpu_r_nw_t65     :   std_logic;
+signal cpu_sync_t65     :   std_logic;
+signal cpu_a_t65        :   std_logic_vector(23 downto 0);
+signal cpu_do_t65       :   std_logic_vector(7 downto 0);
+signal cpu_r_nw_c02     :   std_logic;
+signal cpu_sync_c02     :   std_logic;
+signal kbd_data         :   std_logic_vector(7 downto 0);
+signal kbd_valid        :   std_logic;
+signal kbd_error        :   std_logic;
+signal kbd_busy         :   std_logic;
 
 -- CRTC signals
 signal crtc_clken       :   std_logic;
@@ -990,7 +1011,7 @@ begin
 
     end generate;
 
-    GenT65Core: if UseT65Core and not IncludeICEDebugger generate
+    GenT65Core: if UseT65Core and not IncludeICEDebugger and not KgDualCpu generate
         core : entity work.T65
         port map (
             Mode    => cpu_mode,
@@ -1018,7 +1039,63 @@ begin
         avr_TxD <= avr_RxD;
     end generate;
 
-    GenAlanDCore: if UseAlanDCore and not IncludeICEDebugger generate
+    -- karabas: both CPUs (Welsh71/BBCMicro.Alternate_MiSTer), each held in reset when not selected
+    GenDualCore: if KgDualCpu and not IncludeICEDebugger generate
+        signal t65_res_n : std_logic;
+        signal c02_res_n : std_logic;
+    begin
+        t65_res_n <= reset_n and not m128_mode;
+        c02_res_n <= reset_n and m128_mode;
+
+        core_t65 : entity work.T65
+        port map (
+            Mode    => cpu_mode,
+            Res_n   => t65_res_n,
+            Enable  => cpu_clken,
+            Clk     => clock_48,
+            Rdy     => cpu_ready,
+            Abort_n => cpu_abort_n,
+            IRQ_n   => cpu_irq_n,
+            NMI_n   => cpu_nmi_n,
+            SO_n    => cpu_so_n,
+            R_W_n   => cpu_r_nw_t65,
+            Sync    => cpu_sync_t65,
+            EF      => cpu_ef,
+            MF      => cpu_mf,
+            XF      => cpu_xf,
+            ML_n    => cpu_ml_n,
+            VP_n    => cpu_vp_n,
+            VDA     => cpu_vda,
+            VPA     => cpu_vpa,
+            A       => cpu_a_t65,
+            DI      => cpu_di,
+            DO      => cpu_do_t65
+        );
+
+        core_c02 : entity work.r65c02
+        port map (
+            reset    => c02_res_n,
+            clk      => clock_48,
+            enable   => cpu_clken,
+            nmi_n    => cpu_nmi_n,
+            irq_n    => cpu_irq_n,
+            di       => unsigned(cpu_di),
+            do       => cpu_dout_us,
+            addr     => cpu_addr_us,
+            nwe      => cpu_r_nw_c02,
+            sync     => cpu_sync_c02,
+            sync_irq => open,
+            Regs     => open
+        );
+
+        cpu_do   <= std_logic_vector(cpu_dout_us) when m128_mode = '1' else cpu_do_t65;
+        cpu_a    <= x"00" & std_logic_vector(cpu_addr_us) when m128_mode = '1' else cpu_a_t65;
+        cpu_r_nw <= cpu_r_nw_c02 when m128_mode = '1' else cpu_r_nw_t65;
+        cpu_sync <= cpu_sync_c02 when m128_mode = '1' else cpu_sync_t65;
+        avr_TxD  <= avr_RxD;
+    end generate;
+
+    GenAlanDCore: if UseAlanDCore and not IncludeICEDebugger and not KgDualCpu generate
         core : entity work.r65c02
         port map (
             reset    => reset_n,
@@ -1370,11 +1447,18 @@ begin
            err          => ps2_keyb_error
         );
 
+    -- karabas: the bytes of kg_mcu2 (KgExtKeyboard) or of the PS/2 interface
+    kbd_data  <= ext_kbd_data  when KgExtKeyboard else ps2_keyb_data;
+    kbd_valid <= ext_kbd_valid when KgExtKeyboard else ps2_keyb_valid;
+    kbd_error <= '0'           when KgExtKeyboard else ps2_keyb_error;
+    kbd_busy  <= '0'           when KgExtKeyboard else ps2_keyb_busy;
+
     -- PS/2 Keyboard Controller
     keyboard_controller : entity work.keyboard
         generic map(
             MainClockSpeed => 48000000,
-            LEDUpdateSpeed => 20
+            LEDUpdateSpeed => 20,
+            NoHandshake    => KgExtKeyboard  -- karabas
         )
         port map (
             CLOCK      => clock_48,
@@ -1382,10 +1466,10 @@ begin
             CLKEN_1MHZ => mhz1_clken,
             KEYB_CMD   => ps2_keyb_cmd,
             KEYB_WRITE => ps2_keyb_write,
-            KEYB_DATA  => ps2_keyb_data,
-            KEYB_VALID => ps2_keyb_valid,
-            KEYB_ERROR => ps2_keyb_error,
-            KEYB_BUSY  => ps2_keyb_busy,
+            KEYB_DATA  => kbd_data,
+            KEYB_VALID => kbd_valid,
+            KEYB_ERROR => kbd_error,
+            KEYB_BUSY  => kbd_busy,
             AUTOSCAN   => keyb_enable_n,
             COLUMN     => keyb_column,
             ROW        => keyb_row,
