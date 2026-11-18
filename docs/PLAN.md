@@ -62,6 +62,20 @@ MMFS на SD2 (2026-11-18, BEEB.MMB RetroClinic, 100 МБ, Model B): `*DCAT` (к
 
 `.ssd` / `.dsd` с SD1 через `kg_l2_img` → i8271 (Model B, DFS 1.20) и fdc1772 (Model B DFS 2.26 / Master). OSD: дисководы 0 / 1, файловая система (MMFS / DFS / оба).
 
+Сделано (ветка f2-discs, сборка 26111822):
+- Ядро (`karabas:`, generic `KgFdc`): fdc1772 + i8271 Welsh71 — Master FE24 (управление) / FE28 (1770); Model B FE80-FE9F 8271 или FE80 / FE84 (Acorn 1770); защёлка управления дисководом; NMI от 8271 или INTRQ / DRQ 1770; общий буфер сектора и порт `sd_*`.
+- fdc1772: без `$clog2`, начальное значение `sd_state` (XST, как в core-atarist); fdc1772 / floppy / i8271 через sv2v (`tools/sv2v.sh` → `rtl/sv2v`: XST не принимает объявления в безымянных блоках). Отдельный XST (`measure/alt_*`): 1 400 + 809 LUT, тракт `sd_rd` / `sd_wr` на месте.
+- `bbc_sd_sdc.v` (`cpc_sd_sdc` из core-cpc): слоты 0 / 1 файлового монтировщика `kg_mcu2` → интерфейс секторов MiSTer; `IMG_OUT_LATENCY` 3; защита записи по дисководу.
+- `bbc_mem`: банк на модель, ROM файловых систем по одной копии в `fs.rom` (0x100000), подставляются в слоты по OSD: Model B слот 3 DFS (DNFS 1.20 для 8271 / DFS 2.26 для 1770), слот 8 SWMMFS / SWMMFS2; Master слот 9 MAMMFS / MAMMFS2, а при одном DFS — DFS 2.24 (CMOS по умолчанию грузит ФС из слота 9, иначе Master уходил в ADFS: «No ADFS partitions»), слот 8 DFS при MMFS+DFS.
+- OSD (одобрено 2026-11-18): Drive 0 / Drive 1 (`.ssd`, `.dsd`, `/bbc`, Menu+F1 / F2), Model, Disc FS (MMFS / MMFS2 / DFS / MMFS+DFS / MMFS2+DFS, по умолчанию MMFS+DFS), B FDC (8271 / 1770), Co-Pro, Reset.
+- `tools/mmb.py`: список и извлечение дисков BEEB.MMB, пустой DFS `.ssd`.
+
+| Сборка | LUT | Slices | RAMB16 | DSP48 | Время |
+|---|---|---|---|---|---|
+| 26111822 Mini G | 9 525 (63 %) | 3 251 (86 %) | 13 (+6 RAMB8) | 10 | всё сходится |
+
+На плате 2026-11-18 (Mini G, образы из BEEB.MMB): Model B + 8271 — `*CAT` games1.ssd, `CHAIN"MENU"`, Chuckie Egg идёт; `SAVE` на blank.ssd в Drive 1. Model B + 1770 (DFS 2.26) — читает файл, записанный через 8271 (запись дошла до образа на SD), `CHAIN` печатает KARABAS. Master 128 + 1770 — `SAVE` / `CHAIN` на Drive 1; с Disc FS = DFS грузится в BASIC + DFS (26111822). При MMFS+DFS `*DISC` перехватывает MMFS (у него слот выше): для DFS выбрать Disc FS = DFS.
+
 ### Ф3 — кассеты и опции
 
 UEF (с gzip) — образ в SDRAM или SRAM вместо DDR3. OSD: CoPro 65C02, Music 5000, SID, речь, VideoNuLA, джойстик, громкость.

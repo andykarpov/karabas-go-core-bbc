@@ -13,7 +13,8 @@
  The filing system ROMs are one copy each at 0x100000 (fs.rom, 16 KB slots), and the ROM slots of
  the disc filing systems are mapped onto them (as rom_addr of Welsh71/BBCMicro.Alternate_MiSTer):
    Model B slot 3: DFS 1.20 (8271) / DFS 2.26 (1770) / blank    slot 8: SWMMFS / SWMMFS2 / blank
-   Master  slot 8: DFS 2.24 / blank                               slot 9: MAMMFS / MAMMFS2 / blank
+   Master  slot 8: DFS 2.24 (with MMFS) / blank                   slot 9: MAMMFS / MAMMFS2 / DFS 2.24 (DFS
+           alone: slot 9 is the filing system of the default CMOS, else the Master boots into ADFS)
    fs.rom: 0 SWMMFS, 1 SWMMFS2, 2 DNFS 1.20, 3 DFS 2.26, 4 MAMMFS, 5 MAMMFS2, 6 DFS 2.24 (Master), 7 blank
  (the upper part of Model B slot 8 that SWMMFS uses as RAM is in the RAM half, ext_A[18] = 1: not
  mapped). A change of model or filing system is a power-on reset of the machine anyway.
@@ -98,11 +99,11 @@ always @* begin
 		end
 		else if (m128 && slot == 4'd8) begin
 			fs_map = 1'b1;
-			fs_slot = fs_dfs ? 3'd6 : 3'd7;
+			fs_slot = fs_dfs && fs_mmfs ? 3'd6 : 3'd7;
 		end
 		else if (m128 && slot == 4'd9) begin
 			fs_map = 1'b1;
-			fs_slot = !fs_mmfs ? 3'd7 : fs_mmfs2 ? 3'd5 : 3'd4;
+			fs_slot = fs_mmfs ? (fs_mmfs2 ? 3'd5 : 3'd4) : fs_dfs ? 3'd6 : 3'd7;
 		end
 	end
 end
