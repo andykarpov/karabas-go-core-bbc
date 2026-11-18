@@ -42,6 +42,20 @@ XC6SLX25: 15 032 LUT6, 30 064 FF, 52 RAMB16. SRAM 4 МБ, SDRAM 32 МБ. SD2 (`S
 
 Верх платы на kg_* из karabas-go-modules: `kg_mcu2` (OSD, клавиатура, загрузка ROM из `.kg` в SRAM), SRAM на внешней шине ядра, PLL 48 + 27 МГц, видео 720×576p50 (удвоитель строк ядра) на HDMI / VGA, звук. Оба процессора с выбором по `m128_mode` (как у Welsh71). Клавиатура: USB HID → матрица BBC (`keyboard.vhd` ядра принимает PS/2, решаем в Ф1). MMFS на SD2. OSD: Model, Reset / Break, автозагрузка (Shift+Break). Цель: приглашение BASIC на обеих моделях, `*DCAT` / `*DIN` и запуск игры из BEEB.MMB.
 
+Сделано (ветка f1-minig, сборка 26111820):
+- Ядро (`karabas:`): `KgDualCpu` — T65 и AlanD одновременно, выбор по `m128_mode`, невыбранный в сбросе; `KgExtKeyboard` — байты PS/2 set 2 от `kg_mcu2` прямо в `keyboard.vhd` (generic `NoHandshake`: без команд сброса / ID / LED устройству). Раскладка позиционная, как в BeebFpga: PC `'` = BBC `:` (Shift = `*`), `=` = `^`, F12 = BREAK.
+- `rtl/karabas/bbc_kg_core.vhd` — конфигурация для плат (булевы generic остаются в VHDL). `bbc_clocks.v`: 48 МГц = DCM_CLKGEN 50·24/25 → PLL; 27 / 135 / 8 МГц от второго PLL (VCO 675). `bbc_mem.v`: банки SRAM по 512 КБ `{ MMFS2, модель }`, загрузка ROM из `.kg` (LOAD kind 0, ядро в сбросе). `bbc_video_out.v`: 720×576p50 со своими синхросигналами (`sim/run_video_out.sh`: 624 / 625 строк, окно 720×576 с синхрой ядра и без неё). Звук `audio_l/r` ядра → PCM5102 и HDMI 48 кГц.
+- ROM: `tools/bbc_roms.sh` → `roms/kg/{beeb,master}_{mmfs,mmfs2}.rom` (раскладка Tang Nano).
+- OSD: Model (Model B / Master 128), SD2 FS (MMFS / MMFS2), Co-Pro (Off / 65C02), Reset (Menu+F12). Смена модели / ФС / Co-Pro = сброс по питанию.
+
+| Сборка | LUT | Slices | RAMB16 | DSP48 | Время |
+|---|---|---|---|---|---|
+| 26111820 Mini G | 7 882 (52 %) | 2 913 (77 %) | 13 (+4 RAMB8) | 5 | всё сходится |
+
+На плате 2026-11-18 (Mini G): Model B — «BBC Computer 32K / RAM Master / Model B MMFS SWRAM / BASIC», клавиатура, MODE 2; Master 128 — «Acorn MOS / Master MMFS / BASIC», `*HELP` (MMFS 1.61, DFS 2.24); звук HDMI (`VDU 7`); Model B + Co-Pro 65C02 — «Acorn TUBE 65C102 Co-Processor»; OSD. Сбросов USB за время работы ядра нет. На Master трубу включает CMOS (`*CONFIGURE TUBE`), пункт Co-Pro там не действует (`OverrideCMOS` false).
+
+Осталось в Ф1: BEEB.MMB на SD2 (`*DCAT`, `*DIN`, игра), одобрение OSD пользователем.
+
 ### Ф2 — образы дисков через прошивку
 
 `.ssd` / `.dsd` с SD1 через `kg_l2_img` → i8271 (Model B, DFS 1.20) и fdc1772 (Model B DFS 2.26 / Master). OSD: дисководы 0 / 1, файловая система (MMFS / DFS / оба).
