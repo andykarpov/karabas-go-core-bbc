@@ -1,0 +1,77 @@
+{
+    "id": "bbc",
+    "name": "BBC Micro",
+    "build": "26111820",
+    "visible": true,
+    "type": "osd",
+    "order": 29,
+    "eeprom_bank": 255,
+    "rtc_mode": 0,
+    "roms": [
+        {
+            "filename": "roms/kg/beeb_mmfs.rom",
+            "address": 0
+        },
+        {
+            "filename": "roms/kg/master_mmfs.rom",
+            "address": 524288
+        },
+        {
+            "filename": "roms/kg/beeb_mmfs2.rom",
+            "address": 1048576
+        },
+        {
+            "filename": "roms/kg/master_mmfs2.rom",
+            "address": 1572864
+        }
+    ],
+    "boards": {
+        "minig": {
+            "link": 2,
+            "build": "26111820",
+            "bitstream": "karabas_minig.bin"
+        }
+    },
+    "osd": [
+        {
+            "type": "S",
+            "name": "Model",
+            "options": [
+                "Model B",
+                "Master 128"
+            ],
+            "default": 0,
+            "hotkey": "Menu+M",
+            "index": 0
+        },
+        {
+            "type": "S",
+            "name": "SD2 FS",
+            "options": [
+                "MMFS",
+                "MMFS2"
+            ],
+            "default": 0,
+            "index": 1
+        },
+        {
+            "type": "S",
+            "name": "Co-Pro",
+            "options": [
+                "Off",
+                "65C02"
+            ],
+            "default": 0,
+            "index": 2
+        },
+        {
+            "type": "-"
+        },
+        {
+            "type": "T",
+            "name": "Reset",
+            "hotkey": "Menu+F12",
+            "index": 3
+        }
+    ]
+}

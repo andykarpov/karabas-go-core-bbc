@@ -47,7 +47,9 @@ use IEEE.MATH_REAL.ALL;
 entity keyboard is
 generic (
         MainClockSpeed : natural := 48000000;
-        LEDUpdateSpeed : natural := 20
+        LEDUpdateSpeed : natural := 20;
+        -- karabas: bytes come from the MCU, not a device: no reset / ID handshake, no LED commands
+        NoHandshake    : boolean := false
     );
 port (
     CLOCK       :   in  std_logic;
@@ -189,7 +191,11 @@ begin
                 case state is
                     when reset =>
                         if rst = '0' then
-                            state <= send_rst_cmd;
+                            if NoHandshake then
+                                state <= enabled;  -- karabas
+                            else
+                                state <= send_rst_cmd;
+                            end if;
                         end if;
                     when send_rst_cmd =>
                         -- Send the RST command
@@ -290,7 +296,7 @@ begin
                     when enabled =>
                         if r_led_ctr(r_led_ctr'high) = '1' then
                             r_led_ctr <= to_unsigned(LED_CTR_MAX, r_led_ctr'length);
-                            if r_cur_leds /= i_cur_leds then
+                            if r_cur_leds /= i_cur_leds and not NoHandshake then  -- karabas
                                 state <= update_leds;
                             end if;
                         else
