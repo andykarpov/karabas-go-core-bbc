@@ -1,7 +1,7 @@
 {
     "id": "bbc",
     "name": "BBC Micro",
-    "build": "26111823",
+    "build": "26111824",
     "visible": true,
     "type": "osd",
     "order": 29,
@@ -22,6 +22,16 @@
         }
     ],
     "boards": {
+        "go": {
+            "link": 2,
+            "build": "26111824",
+            "bitstream": "karabas_go.bin"
+        },
+        "mini": {
+            "link": 2,
+            "build": "26111824",
+            "bitstream": "karabas_mini.bin"
+        },
         "minig": {
             "link": 2,
             "build": "26111823",

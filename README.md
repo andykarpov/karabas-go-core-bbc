@@ -2,7 +2,7 @@
 
 Acorn BBC Micro Model B and BBC Master 128 for the Karabas Go board family (Xilinx Spartan-6 XC6SLX25). A port of [BeebFpga](https://github.com/hoglet67/BeebFpga) by David Banks (hoglet67), based on earlier work by Mike Stirling, with the 8271 / 1770 disc controllers and UEF tape player of [BBCMicro.Alternate](https://github.com/Welsh71/BBCMicro.Alternate_MiSTer) by Paul Stewart (Welsh71).
 
-Status: work in progress; runs on Karabas Mini G (Go and Mini tops are not made yet). The plan is in `docs/PLAN.md` (Russian).
+Status: built for Karabas Go, Mini and Mini G (`src/bbc.kg`, one file for all three); checked on Mini G, Go and Mini have not run on a board yet. The plan and the history are in `docs/PLAN.md` (Russian), a Russian README is `README.ru.md`.
 
 ## Using the core
 
