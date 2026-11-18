@@ -11,9 +11,14 @@
  (FT_CLK_OUT). clk_48 and clk_27 are from two PLLs: the paths between them are not timed, the core
  and the modules cross them by design (dual clock RAMs, synchronisers, values that are stable).
 
- Memory (bbc_mem): the external bus of the core (512 KB) on the SRAM, a bank of 512 KB per
- { filing system, model }; the ROM images (roms/kg, tools/bbc_roms.sh) come from the .kg when the
- core starts, the machine is held in reset while they load.
+ Memory (bbc_mem): the external bus of the core (512 KB) on the SRAM, a bank of 512 KB per model,
+ the disc filing system ROMs (fs.rom) mapped onto their slots by the OSD choice; the ROM images
+ (roms/kg, tools/bbc_roms.sh) come from the .kg when the core starts, the machine is held in reset
+ while they load.
+
+ Discs: .ssd / .dsd images of the SD card through the file mounter of kg_mcu2 (F items Drive 0 / 1 =
+ slots 0 / 1, bbc_sd_sdc) on the 1770 (Master, Model B with B FDC 1770) or the 8271 (Model B) of the
+ core (KgFdc, Welsh71).
 
  SD2 (the second card, on the FPGA pins): MMFS / MMFS2 of the core drive it themselves (IncludeSPISD,
  a BEEB.MMB file or .ssd files on a FAT card): kg_mcu2 has no SD2 here (ENABLE_SD2 0).
@@ -27,9 +32,10 @@
  (KgExtKeyboard): F12 = BREAK, the rest as BeebFpga. Joystick 1 / 2: the first and second pad.
 
  Soft switches (the index of the item in the osd of core.json, "index"):
-   0 Model (Model B / Master 128)   1 Filing system on SD2 (MMFS / MMFS2)   2 Co-processor (Off /
-   65C02)   3 Reset (a power-on reset)
- A change of Model or Filing system resets the machine.
+   0 Model (Model B / Master 128)   1 Disc FS (MMFS / MMFS2 / DFS / MMFS+DFS / MMFS2+DFS: the ROMs
+   in their slots; MMFS on SD2, DFS on the images)   2 B FDC (8271 / 1770, Model B)   3 Co-processor
+   (Off / 65C02)   4 Reset (a power-on reset)
+ A change of Model, Disc FS, B FDC or Co-processor resets the machine.
 */
 
 module karabas_minig_top (
@@ -205,13 +211,20 @@ wire [1:0] osd_alpha, osd_place;
 wire [4:0] osd_px, osd_ph;
 wire [3:0] osd_py;
 wire [5:0] osd_pw;
+wire [7:0] sdc_img_mounted, img_wp, sdc_rd, sdc_wr, sdc_byte_in_data, sdc_byte_out_data;
+wire [63:0] sdc_img_size;
+wire [31:0] sdc_sector;
+wire sdc_busy, sdc_done, sdc_byte_in_strobe;
+wire [2:0] sdc_slot;
+wire [8:0] sdc_byte_addr;
 
 kg_mcu2 #(
 	.SW_N(8),
 	.CS_FILTER(3),
-	.CAPS(16'h0000),
+	.CAPS(16'h0004),     // bit 2: write protected images
 	.ENABLE_OSD(1),
-	.ENABLE_IMG(0),
+	.ENABLE_IMG(1),
+	.IMG_OUT_LATENCY(3), // the address register of kg_l2_img, the buffer RAM of fdc1772, the register of bbc_sd_sdc
 	.ENABLE_AUX(1),      // DEBUG_*: the state of the core (AT+KARABAS=debug:1, kg_board.py log)
 	.ENABLE_FT(1),
 	.ENABLE_SD2(0)       // SD2 belongs to the core (MMFS)
@@ -243,10 +256,10 @@ kg_mcu2 #(
 	.OSD_FG(osd_fg), .OSD_BG(osd_bg), .OSD_ALPHA(osd_alpha), .OSD_PX(osd_px), .OSD_PY(osd_py),
 	.OSD_PW(osd_pw), .OSD_PH(osd_ph), .OSD_PLACE(osd_place), .OSD_ZOOM(osd_zoom),
 
-	.SDC_IMG_MOUNTED(), .SDC_IMG_SIZE(), .SDC_RD(8'd0), .SDC_WR(8'd0),
-	.SDC_SECTOR(), .SDC_BUSY(), .SDC_DONE(), .SDC_ERROR(), .SDC_SLOT(),
-	.SDC_BYTE_IN_STROBE(), .SDC_BYTE_ADDR(), .SDC_BYTE_IN_DATA(),
-	.SDC_BYTE_OUT_DATA(8'd0), .IMG_WP(), .IMG_PHYS_WR(), .IMG_PHYS(), .IMG_FLUSH(), .FDD_CHNG_WR(), .FDD_CHNG(),
+	.SDC_IMG_MOUNTED(sdc_img_mounted), .SDC_IMG_SIZE(sdc_img_size), .SDC_RD(sdc_rd), .SDC_WR(sdc_wr),
+	.SDC_SECTOR(sdc_sector), .SDC_BUSY(sdc_busy), .SDC_DONE(sdc_done), .SDC_ERROR(), .SDC_SLOT(sdc_slot),
+	.SDC_BYTE_IN_STROBE(sdc_byte_in_strobe), .SDC_BYTE_ADDR(sdc_byte_addr), .SDC_BYTE_IN_DATA(sdc_byte_in_data),
+	.SDC_BYTE_OUT_DATA(sdc_byte_out_data), .IMG_WP(img_wp), .IMG_PHYS_WR(), .IMG_PHYS(), .IMG_FLUSH(), .FDD_CHNG_WR(), .FDD_CHNG(),
 	.FDD_CHNG_REQ(1'b0), .FDD_CHNG_DS(2'd0), .IMG_ACTIVE(),
 	.PORT_OUT_DATA(), .PORT_OUT_WR(), .PORT_OUT_READY(4'b1111), .PORT_IN_DATA(32'd0), .PORT_IN_WR(4'd0),
 	.PORT_CFG(128'd0), .PORT_IN_FULL(), .PORT_STAT(), .PORT_STAT_WR(),
@@ -265,23 +278,26 @@ assign FT_SPI_MOSI = ft_spi_on ? ft_mosi : 1'b1;
 // ------------------------------------------------------------------ soft switches, reset
 
 wire sw_master = sw[0*8];
-wire sw_mmfs2 = sw[1*8];
-wire sw_copro = sw[2*8];
-wire sw_reset = sw[3*8];
+wire [2:0] sw_fs = sw[1*8 +: 3];
+wire sw_1770 = sw[2*8];
+wire sw_copro = sw[3*8];
+wire sw_reset = sw[4*8];
 
 wire loading;
 
 // the model and the filing system are taken while the machine is in reset; a change of either
 // (or the Reset item, or a ROM load) gives a power-on reset of about 1.4 ms (16 bits of clk_48,
 // as the reset counters of BeebFpga)
-reg m128_mode = 1'b0, mmfs2 = 1'b0, copro_mode = 1'b0;
+reg m128_mode = 1'b0, copro_mode = 1'b0, fdc_8271 = 1'b1;
+reg [2:0] fs = 3'd3;
 reg [15:0] rst_cnt = 16'd0;
 reg powerup_reset_n = 1'b0;
 always @(posedge clk_48) begin
-	if (areset || loading || sw_reset || sw_master != m128_mode || sw_mmfs2 != mmfs2 || sw_copro != copro_mode) begin
+	if (areset || loading || sw_reset || sw_master != m128_mode || sw_fs != fs || sw_1770 == fdc_8271 || sw_copro != copro_mode) begin
 		rst_cnt <= 16'd0;
 		m128_mode <= sw_master;
-		mmfs2 <= sw_mmfs2;
+		fs <= sw_fs;
+		fdc_8271 <= !sw_1770;
 		copro_mode <= sw_copro;
 	end
 	else if (!rst_cnt[15])
@@ -289,6 +305,11 @@ always @(posedge clk_48) begin
 	powerup_reset_n <= rst_cnt[15];
 end
 wire hard_reset_n = powerup_reset_n;
+
+// Disc FS: 0 MMFS, 1 MMFS2, 2 DFS, 3 MMFS+DFS, 4 MMFS2+DFS
+wire fs_mmfs = fs != 3'd2;
+wire fs_mmfs2 = fs == 3'd1 || fs == 3'd4;
+wire fs_dfs = fs >= 3'd2;
 
 // ------------------------------------------------------------------ the core
 
@@ -302,6 +323,51 @@ wire sd_ss, sd_clk, sd_mosi;
 wire caps_led, shift_led, motor_led;
 wire cas_out;
 wire [15:0] cpu_addr;
+wire floppy_led;
+
+// disc images: the file mounter of kg_mcu2 (slots 0 / 1) -> the MiSTer sector interface
+wire [31:0] sd_lba;
+wire [1:0] sd_rd, sd_wr, sd_ack, img_mounted;
+wire [8:0] sd_buff_addr;
+wire [7:0] sd_buff_dout, sd_buff_din;
+wire sd_buff_wr, img_readonly;
+wire [63:0] img_size;
+bbc_sd_sdc disks (
+	.clk(clk_48),
+	.reset(areset),
+	.sd_lba(sd_lba),
+	.sd_rd(sd_rd),
+	.sd_wr(sd_wr),
+	.sd_ack(sd_ack),
+	.sd_buff_addr(sd_buff_addr),
+	.sd_buff_dout(sd_buff_dout),
+	.sd_buff_din(sd_buff_din),
+	.sd_buff_wr(sd_buff_wr),
+	.img_mounted(img_mounted),
+	.img_size(img_size),
+	.img_readonly(img_readonly),
+	.sdc_img_mounted(sdc_img_mounted),
+	.sdc_img_size(sdc_img_size),
+	.img_wp(img_wp),
+	.sdc_rd(sdc_rd),
+	.sdc_wr(sdc_wr),
+	.sdc_sector(sdc_sector),
+	.sdc_busy(sdc_busy),
+	.sdc_done(sdc_done),
+	.sdc_slot(sdc_slot),
+	.sdc_byte_in_strobe(sdc_byte_in_strobe),
+	.sdc_byte_addr(sdc_byte_addr),
+	.sdc_byte_in_data(sdc_byte_in_data),
+	.sdc_byte_out_data(sdc_byte_out_data)
+);
+
+// the write protection of each drive, taken at its mount (img_size / img_readonly come with
+// img_mounted one clock later than the mounter pulse: as bbc_sd_sdc registers them together)
+reg [1:0] drive_wp = 2'b00;
+always @(posedge clk_48) begin
+	if (img_mounted[0]) drive_wp[0] <= img_readonly;
+	if (img_mounted[1]) drive_wp[1] <= img_readonly;
+end
 
 // joystick: bits 0 up, 1 down, 2 left, 3 right, 4 fire, low active (pad: 1 up, 2 down, 3 left,
 // 4 right, 6 A, 7 B)
@@ -344,7 +410,20 @@ bbc_kg_core core (
 	.SDMOSI(sd_mosi),
 	.cas_in(1'b1),
 	.cas_out(cas_out),
-	.cpu_addr(cpu_addr)
+	.cpu_addr(cpu_addr),
+	.fdc_8271(fdc_8271),
+	.img_mounted(img_mounted),
+	.img_wp(drive_wp),
+	.img_size(img_size[31:0]),
+	.sd_lba(sd_lba),
+	.sd_rd(sd_rd),
+	.sd_wr(sd_wr),
+	.sd_ack(|sd_ack),
+	.sd_buff_addr(sd_buff_addr),
+	.sd_dout(sd_buff_dout),
+	.sd_din(sd_buff_din),
+	.sd_dout_strobe(sd_buff_wr),
+	.floppy_led(floppy_led)
 );
 
 assign SD_CS_N = sd_ss;
@@ -358,7 +437,11 @@ wire [15:0] sram_md_o;
 wire sram_md_oe;
 bbc_mem mem (
 	.clk(clk_48),
-	.bank({ mmfs2, m128_mode }),
+	.m128(m128_mode),
+	.fs_mmfs(fs_mmfs),
+	.fs_mmfs2(fs_mmfs2),
+	.fs_dfs(fs_dfs),
+	.fdc_8271(fdc_8271),
 	.ext_a(ext_a),
 	.ext_ncs(ext_ncs),
 	.ext_noe(ext_noe),
@@ -489,9 +572,10 @@ hdmi_tx #(.SAMPLE_FREQ(48000)) hdmi (
 
 // ------------------------------------------------------------------ debug
 
-// DEBUG_ADDR: the address of the CPU; DEBUG_DATA: { loading, reset_n, mmfs2, m128, copro, leds, 0 }
+// DEBUG_ADDR: the address of the CPU; DEBUG_DATA: { loading, reset_n, m128, copro, 8271, fs, leds,
+// floppy led, sd_rd, sd_ack }
 assign dbg_addr = cpu_addr;
 always @(posedge clk_48)
-	dbg_data <= { loading, hard_reset_n, mmfs2, m128_mode, copro_mode, caps_led, shift_led, motor_led, 8'd0 };
+	dbg_data <= { loading, hard_reset_n, m128_mode, copro_mode, fdc_8271, fs, caps_led, shift_led, motor_led, floppy_led, sd_rd, sd_ack };
 
 endmodule

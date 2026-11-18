@@ -5,7 +5,8 @@
 -- ports they use.
 --
 -- Configuration: Model B (T65) and Master 128 (AlanD) in one bitstream (KgDualCpu, picked by
--- m128_mode), keyboard bytes from the MCU (KgExtKeyboard), MMFS on the SD card (SPI), SID,
+-- m128_mode), keyboard bytes from the MCU (KgExtKeyboard), MMFS on the SD card (SPI), the 1770 and
+-- 8271 disc controllers on images (KgFdc, the MiSTer sector interface sd_*), SID,
 -- Music 5000 with its filter, the internal 65C02 co-processor, VideoNuLA, the VGA scan doubler
 -- (clock_27). Not used: speech (TMS5220: too large next to the rest, user decision 2026-11-18),
 -- the 48 kHz resampler (the tops take audio_l / audio_r), HDMI of the core (the boards have their
@@ -57,7 +58,21 @@ entity bbc_kg_core is
         cas_in          : in  std_logic;
         cas_out         : out std_logic;
 
-        cpu_addr        : out std_logic_vector(15 downto 0)
+        cpu_addr        : out std_logic_vector(15 downto 0);
+
+        fdc_8271        : in  std_logic;
+        img_mounted     : in  std_logic_vector(1 downto 0);
+        img_wp          : in  std_logic_vector(1 downto 0);
+        img_size        : in  std_logic_vector(31 downto 0);
+        sd_lba          : out std_logic_vector(31 downto 0);
+        sd_rd           : out std_logic_vector(1 downto 0);
+        sd_wr           : out std_logic_vector(1 downto 0);
+        sd_ack          : in  std_logic;
+        sd_buff_addr    : in  std_logic_vector(8 downto 0);
+        sd_dout         : in  std_logic_vector(7 downto 0);
+        sd_din          : out std_logic_vector(7 downto 0);
+        sd_dout_strobe  : in  std_logic;
+        floppy_led      : out std_logic
     );
 end entity;
 
@@ -96,6 +111,7 @@ begin
             UseAlanDCore           => false,
             KgDualCpu              => true,
             KgExtKeyboard          => true,
+            KgFdc                  => true,
             OverrideCMOS           => false
         )
         port map (
@@ -199,6 +215,20 @@ begin
             m128_mode       => m128_mode,
             ext_kbd_data    => kbd_data,
             ext_kbd_valid   => kbd_valid,
+
+            fdc_8271        => fdc_8271,
+            img_mounted     => img_mounted,
+            img_wp          => img_wp,
+            img_size        => img_size,
+            sd_lba          => sd_lba,
+            sd_rd           => sd_rd,
+            sd_wr           => sd_wr,
+            sd_ack          => sd_ack,
+            sd_buff_addr    => sd_buff_addr,
+            sd_dout         => sd_dout,
+            sd_din          => sd_din,
+            sd_dout_strobe  => sd_dout_strobe,
+            floppy_led      => floppy_led,
 
             copro_mode      => copro_mode,
             copro_ext       => '0',

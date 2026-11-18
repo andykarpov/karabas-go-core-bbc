@@ -12,7 +12,7 @@
 # Ф0 measures: every option on (SPI SD, SID, Music 5000 + filter, mixer / resampler, speech,
 # CoPro 65C02, VideoNuLA, VGA scan doubler, serial / tape) except HDMI and the ICE debugger,
 # with -iobuf NO: the logic kept is what drives the core ports.
-# Boards: karabas_<board>.prj (tools/board_modules.prj + measure/bbc_core.prj + rtl/karabas), .xst,
+# Boards: karabas_<board>.prj (tools/board_modules.prj + rtl/sv2v (tools/sv2v.sh) + measure/bbc_core.prj + rtl/karabas), .xst,
 # .ut, .ucf; the configuration of the core is in rtl/karabas/bbc_kg_core.vhd.
 
 ISE_SETTINGS ?= /opt/Xilinx/14.7/ISE_DS/settings64.sh
@@ -30,7 +30,7 @@ BOARDS = minig
 # all boards in one file: a board build puts its bitstream in (make_core --boards)
 KG = bbc.kg
 JSON = core.json
-ROMS = roms/kg/beeb_mmfs.rom roms/kg/master_mmfs.rom roms/kg/beeb_mmfs2.rom roms/kg/master_mmfs2.rom
+ROMS = roms/kg/beeb.rom roms/kg/master.rom roms/kg/fs.rom
 
 # map / par options (cost table 2 by default, the rule of all the cores)
 MAP_T_minig ?= 2
