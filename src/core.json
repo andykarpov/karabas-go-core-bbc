@@ -1,7 +1,7 @@
 {
     "id": "bbc",
     "name": "BBC Micro",
-    "build": "26111822",
+    "build": "26111823",
     "visible": true,
     "type": "osd",
     "order": 29,
@@ -24,7 +24,7 @@
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26111822",
+            "build": "26111823",
             "bitstream": "karabas_minig.bin"
         }
     },
@@ -44,6 +44,14 @@
             "extensions": ".ssd,.dsd",
             "dir": "/bbc",
             "hotkey": "Menu+F2"
+        },
+        {
+            "type": "FL",
+            "name": "Tape",
+            "slot": 2,
+            "extensions": ".uef",
+            "dir": "/bbc",
+            "hotkey": "Menu+F3"
         },
         {
             "type": "-"
@@ -94,6 +102,11 @@
         },
         {
             "type": "-"
+        },
+        {
+            "type": "T",
+            "name": "Tape rewind",
+            "index": 5
         },
         {
             "type": "T",

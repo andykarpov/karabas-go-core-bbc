@@ -10,7 +10,8 @@
 -- Music 5000 with its filter, the internal 65C02 co-processor, VideoNuLA, the VGA scan doubler
 -- (clock_27). Not used: speech (TMS5220: too large next to the rest, user decision 2026-11-18),
 -- the 48 kHz resampler (the tops take audio_l / audio_r), HDMI of the core (the boards have their
--- own), sRGB, the ICE debugger, the serial port, the AMX mouse (later), the external tube.
+-- own), sRGB, the ICE debugger, the AMX mouse (later), the external tube. The serial port is in for
+-- the cassette (ACIA + Serial ULA), its RS423 side is not wired.
 
 library ieee;
 use ieee.std_logic_1164.all;
@@ -105,7 +106,7 @@ begin
             IncludeVGA             => true,
             IncludeHDMI            => false,
             IncludeTrace           => false,
-            IncludeSerial          => false,
+            IncludeSerial          => true,   -- karabas: ACIA + Serial ULA, the cassette (cas_in from bbc_tape)
             UseOrigKeyboard        => false,
             UseT65Core             => false,
             UseAlanDCore           => false,
