@@ -80,6 +80,21 @@ MMFS на SD2 (2026-11-18, BEEB.MMB RetroClinic, 100 МБ, Model B): `*DCAT` (к
 
 UEF (с gzip) — образ в SDRAM или SRAM вместо DDR3. OSD: CoPro 65C02, Music 5000, SID, речь, VideoNuLA, джойстик, громкость.
 
+Сделано (ветка f3-tape, сборка 26111823):
+- Образ ленты — в SDRAM 32 МБ (на плате она свободна; SRAM ядро занимает каждым слотом CPU / видео / Tube). `bbc_tape_sdram.v`: один байтовый порт, сделан из `bk_sdram.v` core-bk (инвертированный клок чипа через ODDR2, захват по спаду, CL2, автопрекардж, регенерация каждые 360 тактов), выводы SDRAM `SLEW SLOW`, как в core-bk.
+- `bbc_tape.v`: FL Tape (слот 2) → FIFO 16 → SDRAM; `tape_player` Welsh71 (через sv2v, чанки UEF 0100 / 0102 / 0104 / 0110 / 0111 / 0112 / 0116 / 0117) → `cas_in` Serial ULA ядра (`IncludeSerial`, своя у BeebFpga dev) при включённом моторе; без образа — вход `TAPE_IN` платы. `TAPE_OUT` = кассетный выход ядра.
+- `sim/run_tape.sh` (1 с): маленький UEF через `LD_*` в поведенческую SDRAM (`sim/sdram_model.v`), чтение обратно, воспроизведение, 140 фронтов — PASS.
+- `tools/uef.py`: несжатый UEF из файлов DFS `.ssd` (кассетные блоки BBC, CRC-16).
+- OSD: Tape (`.uef`, Menu+F3), Tape rewind.
+
+| Сборка | LUT | Slices | RAMB16 | DSP48 | Время |
+|---|---|---|---|---|---|
+| 26111823 Mini G | 10 621 (70 %) | 3 459 (92 %) | 13 (+7 RAMB8) | 12 | всё сходится |
+
+На плате 2026-11-18: snake.uef (SNAKE + BANDIT из games1.ssd, `tools/uef.py`) → `*TAPE`, `CHAIN""`: Searching / Loading / блоки, Snake запустился. Сбросов USB нет (SDRAM в работе).
+
+Не сделано: gzip-образы (`.uef` часто сжаты; `inflate.v` Welsh71 — только логика, без BRAM; при 92 % slices сначала замер), звук ленты в динамике, опции OSD для Music 5000 / SID / NuLA / джойстика.
+
 ### Ф4 — Go и Mini, выпуск
 
 Топы Go / Mini, сборка всех плат, `cores.json` karabas-go.
