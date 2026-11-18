@@ -28,13 +28,17 @@
 
  Audio: the mix of the core (SN76489 + SID + Music 5000, 16 bits signed) to the PCM5102 and HDMI (48 kHz).
 
+ Cassette (bbc_tape): a UEF image of the FL item Tape in the SDRAM, played by tape_player of Welsh71
+ into the Serial ULA of the core while the cassette motor is on; otherwise TAPE_IN. TAPE_OUT = the
+ cassette output of the core.
+
  Keyboard: the PS/2 set 2 bytes of kg_mcu2 straight into the keyboard matrix of the core
  (KgExtKeyboard): F12 = BREAK, the rest as BeebFpga. Joystick 1 / 2: the first and second pad.
 
  Soft switches (the index of the item in the osd of core.json, "index"):
    0 Model (Model B / Master 128)   1 Disc FS (MMFS / MMFS2 / DFS / MMFS+DFS / MMFS2+DFS: the ROMs
    in their slots; MMFS on SD2, DFS on the images)   2 B FDC (8271 / 1770, Model B)   3 Co-processor
-   (Off / 65C02)   4 Reset (a power-on reset)
+   (Off / 65C02)   4 Reset (a power-on reset)   5 Tape rewind
  A change of Model, Disc FS, B FDC or Co-processor resets the machine.
 */
 
@@ -142,15 +146,6 @@ assign ADC_BCK = 1'bz;
 assign ADC_LRCK = 1'bz;
 assign MIDI_TX = 1'b1;
 
-// the SDRAM is not used: no clock, deselected by its commands (NOP: RAS / CAS / WE high)
-assign SDR_A = 13'd0;
-assign SDR_BA = 2'b00;
-assign SDR_CLK = 1'b0;
-assign SDR_DQM = 2'b11;
-assign SDR_WE_N = 1'b1;
-assign SDR_CAS_N = 1'b1;
-assign SDR_RAS_N = 1'b1;
-assign SDR_DQ = 16'bz;
 
 // FLASH_CS_N (T3) is the SDRAM /CS of Mini G2 (rev G: tied low on the board): always selected
 assign FLASH_CS_N = 1'b0;
@@ -176,6 +171,9 @@ wire areset, areset_27;
 kg_sync #(.W(1), .STAGES(2), .INIT(1'b1)) sync_areset (.clk(clk_48), .d(areset_async), .q(areset));
 kg_sync #(.W(1), .STAGES(2), .INIT(1'b1)) sync_areset_27 (.clk(clk_27), .d(areset_async), .q(areset_27));
 
+// the clock of the SDRAM: the inverse of clk_48 (bbc_tape_sdram)
+ODDR2 oddr_sdr_clk (.Q(SDR_CLK), .C0(clk_48), .C1(~clk_48), .CE(1'b1), .D0(1'b0), .D1(1'b1), .R(1'b0), .S(1'b0));
+
 // the clock of the FT812
 ODDR2 oddr_ft_clk (.Q(FT_CLK_OUT), .C0(clk_8), .C1(~clk_8), .CE(1'b1), .D0(1'b1), .D1(1'b0), .R(1'b0), .S(1'b0));
 
@@ -195,9 +193,9 @@ wire [15:0] joy_l, joy_r;
 wire [7:0] ps2_code;
 wire ps2_kind, ps2_wr;
 wire [1:0] ld_kind;
-wire [7:0] ld_data;
+wire [7:0] ld_data, ld_slot;
 wire [31:0] ld_addr;
-wire ld_active, ld_wr;
+wire ld_active, ld_wr, ld_start;
 wire [8*8-1:0] sw;
 wire dvi_only;
 wire ft_cs_n, ft_mosi, ft_spi_on;
@@ -249,7 +247,7 @@ kg_mcu2 #(
 	.JOY_L(joy_l), .JOY_R(joy_r), .JOY_WR(),
 	.PS2_CMD(16'h0000), .PS2_CMD_WR(1'b0),
 
-	.LD_KIND(ld_kind), .LD_SLOT(), .LD_SIZE(), .LD_EXT(), .LD_START(), .LD_ACTIVE(ld_active), .LD_END(),
+	.LD_KIND(ld_kind), .LD_SLOT(ld_slot), .LD_SIZE(), .LD_EXT(), .LD_START(ld_start), .LD_ACTIVE(ld_active), .LD_END(),
 	.LD_ADDR(ld_addr), .LD_DATA(ld_data), .LD_WR(ld_wr), .LD_READY(1'b1),
 
 	.OSD_WR(osd_wr), .OSD_WADDR(osd_waddr), .OSD_WDATA(osd_wdata), .OSD_EN(osd_en),
@@ -282,6 +280,7 @@ wire [2:0] sw_fs = sw[1*8 +: 3];
 wire sw_1770 = sw[2*8];
 wire sw_copro = sw[3*8];
 wire sw_reset = sw[4*8];
+wire sw_rewind = sw[5*8];
 
 wire loading;
 
@@ -321,7 +320,7 @@ wire ext_ncs, ext_noe, ext_nwe;
 wire [7:0] ext_din, ext_dout;
 wire sd_ss, sd_clk, sd_mosi;
 wire caps_led, shift_led, motor_led;
-wire cas_out;
+wire cas_out, cas_in;
 wire [15:0] cpu_addr;
 wire floppy_led;
 
@@ -408,7 +407,7 @@ bbc_kg_core core (
 	.SDSS(sd_ss),
 	.SDCLK(sd_clk),
 	.SDMOSI(sd_mosi),
-	.cas_in(1'b1),
+	.cas_in(cas_in),
 	.cas_out(cas_out),
 	.cpu_addr(cpu_addr),
 	.fdc_8271(fdc_8271),
@@ -430,6 +429,41 @@ assign SD_CS_N = sd_ss;
 assign SD_CLK = sd_clk;
 assign SD_DI = sd_mosi;
 assign TAPE_OUT = cas_out;
+
+// ------------------------------------------------------------------ the cassette
+
+// a UEF image of the FL item Tape (slot 2) in the SDRAM, played while the motor is on; with no image
+// playing, the tape input of the board (TAPE_IN)
+wire tape_play, tape_playing, tape_error;
+bbc_tape #(.TAPE_SLOT(8'd2), .TICK_DIV(2496)) tape (
+	.clk(clk_48),
+	.reset(areset),
+	.lock(pll_locked),
+	.ld_kind(ld_kind),
+	.ld_slot(ld_slot),
+	.ld_start(ld_start),
+	.ld_active(ld_active),
+	.ld_wr(ld_wr),
+	.ld_addr(ld_addr),
+	.ld_data(ld_data),
+	.motor(motor_led),
+	.rewind(sw_rewind),
+	.cas_out(tape_play),
+	.playing(tape_playing),
+	.error(tape_error),
+	.SDRAM_A(SDR_A),
+	.SDRAM_BA(SDR_BA),
+	.SDRAM_DQ(SDR_DQ),
+	.SDRAM_nRAS(SDR_RAS_N),
+	.SDRAM_nCAS(SDR_CAS_N),
+	.SDRAM_nWE(SDR_WE_N),
+	.SDRAM_DQM(SDR_DQM)
+);
+
+reg [1:0] tape_in_s = 2'b11;
+always @(posedge clk_48)
+	tape_in_s <= { tape_in_s[0], TAPE_IN };
+assign cas_in = tape_playing ? tape_play : tape_in_s[1];
 
 // ------------------------------------------------------------------ memory
 
