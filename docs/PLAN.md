@@ -54,7 +54,9 @@ XC6SLX25: 15 032 LUT6, 30 064 FF, 52 RAMB16. SRAM 4 МБ, SDRAM 32 МБ. SD2 (`S
 
 На плате 2026-11-18 (Mini G): Model B — «BBC Computer 32K / RAM Master / Model B MMFS SWRAM / BASIC», клавиатура, MODE 2; Master 128 — «Acorn MOS / Master MMFS / BASIC», `*HELP` (MMFS 1.61, DFS 2.24); звук HDMI (`VDU 7`); Model B + Co-Pro 65C02 — «Acorn TUBE 65C102 Co-Processor»; OSD. Сбросов USB за время работы ядра нет. На Master трубу включает CMOS (`*CONFIGURE TUBE`), пункт Co-Pro там не действует (`OverrideCMOS` false).
 
-Осталось в Ф1: BEEB.MMB на SD2 (`*DCAT`, `*DIN`, игра), одобрение OSD пользователем.
+MMFS на SD2 (2026-11-18, BEEB.MMB RetroClinic, 100 МБ, Model B): `*DCAT` (каталог больше 200 дисков), `*DIN 0` + `*CAT` (диск MENU), `*EXEC !BOOT` — меню RetroClinic (65 страниц, цветной Mode 7), игра «2002» (Superior) загрузилась и идёт в графическом режиме. Shift+Break через `kg_board.py key shift+f12` дал только Break без автозагрузки (вероятно, Shift отпускается вместе с F12): проверить с настоящей клавиатуры.
+
+Осталось в Ф1: одобрение OSD пользователем.
 
 ### Ф2 — образы дисков через прошивку
 
