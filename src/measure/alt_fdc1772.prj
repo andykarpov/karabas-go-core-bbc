@@ -1,0 +1,4 @@
+verilog work "rtl/sv2v/fdc1772_dpram.v"
+verilog work "rtl/sv2v/fdc1772.v"
+verilog work "rtl/sv2v/floppy.v"
+verilog work "rtl/sv2v/i8271.v"

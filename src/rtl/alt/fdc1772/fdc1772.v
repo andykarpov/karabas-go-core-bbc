@@ -96,7 +96,7 @@ localparam IMG_TI99        = 3; // V9T9 format
 parameter  IMG_TYPE        = IMG_BBC;
 
 localparam W    = FD_NUM - 1;
-localparam WIDX = $clog2(FD_NUM);
+localparam WIDX = (FD_NUM > 2) ? 2 : 1;  // karabas: no $clog2 in XST (FD_NUM 2..4)
 
 // -------------------------------------------------------------------------
 // --------------------- IO controller image handling ----------------------
@@ -796,7 +796,7 @@ localparam SD_IDLE = 0;
 localparam SD_READ = 1;
 localparam SD_WRITE = 2;
 
-reg [1:0] sd_state;
+reg [1:0] sd_state = 2'd0;  // karabas: initial value (XST trims a state register without one, see core-atarist)
 reg       sd_card_write;
 reg       sd_card_read;
 

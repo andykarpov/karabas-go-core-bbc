@@ -88,6 +88,10 @@ entity bbc_micro_core is
         -- karabas: the keyboard bytes (PS/2 set 2) come from ext_kbd_data / ext_kbd_valid (kg_mcu2),
         -- not from the PS/2 pins: no handshake with a device, no LED commands
         KgExtKeyboard          : boolean := false;
+        -- karabas: the disc controllers of Welsh71/BBCMicro.Alternate_MiSTer on disc images (the
+        -- MiSTer sector interface sd_*): WD1770 (Master FE24 / FE28, Model B Acorn 1770 at FE80 / FE84)
+        -- and Intel 8271 (Model B, FE80-FE9F, when fdc_8271), both NMI driven
+        KgFdc                  : boolean := false;
         OverrideCMOS           : boolean := true   -- Overide CMOS/RTC mode settings with keyb_dip
     );
     port (
@@ -256,6 +260,21 @@ entity bbc_micro_core is
         -- karabas: keyboard bytes (KgExtKeyboard)
         ext_kbd_data   : in    std_logic_vector(7 downto 0) := (others => '0');
         ext_kbd_valid  : in    std_logic := '0';
+
+        -- karabas: disc images (KgFdc): drives 0 / 1 = images 0 / 1
+        fdc_8271       : in    std_logic := '0';  -- Model B: Intel 8271 (DFS 1.20), else WD1770
+        img_mounted    : in    std_logic_vector(1 downto 0) := "00";
+        img_wp         : in    std_logic_vector(1 downto 0) := "00";
+        img_size       : in    std_logic_vector(31 downto 0) := (others => '0');
+        sd_lba         : out   std_logic_vector(31 downto 0);
+        sd_rd          : out   std_logic_vector(1 downto 0);
+        sd_wr          : out   std_logic_vector(1 downto 0);
+        sd_ack         : in    std_logic := '0';
+        sd_buff_addr   : in    std_logic_vector(8 downto 0) := (others => '0');
+        sd_dout        : in    std_logic_vector(7 downto 0) := (others => '0');
+        sd_din         : out   std_logic_vector(7 downto 0);
+        sd_dout_strobe : in    std_logic := '0';
+        floppy_led     : out   std_logic;
 
         -- Copro
         --    On the Model B these are used directly to control the tube register visibility
@@ -679,6 +698,109 @@ signal kbd_data         :   std_logic_vector(7 downto 0);
 signal kbd_valid        :   std_logic;
 signal kbd_error        :   std_logic;
 signal kbd_busy         :   std_logic;
+
+-- karabas: KgFdc
+component fdc1772 is
+    generic (
+        CLK_EN    : integer := 4000;
+        EXT_MOTOR : integer := 1
+    );
+    port (
+        clksys         : in  std_logic;
+        clkcpu         : in  std_logic;
+        clk8m_en       : in  std_logic;
+        floppy_drive   : in  std_logic_vector( 1 downto 0);
+        floppy_side    : in  std_logic;
+        floppy_reset   : in  std_logic;
+        floppy_step    : out std_logic;
+        floppy_motor   : in  std_logic;
+        floppy_ready   : out std_logic;
+        irq            : out std_logic;
+        drq            : out std_logic;
+        cpu_addr       : in  std_logic_vector( 1 downto 0);
+        cpu_sel        : in  std_logic;
+        cpu_rw         : in  std_logic;
+        cpu_din        : in  std_logic_vector( 7 downto 0);
+        cpu_dout       : out std_logic_vector( 7 downto 0);
+        img_mounted    : in  std_logic_vector( 1 downto 0);
+        img_wp         : in  std_logic_vector( 1 downto 0);
+        img_size       : in  std_logic_vector(31 downto 0);
+        sd_lba         : out std_logic_vector(31 downto 0);
+        sd_rd          : out std_logic_vector( 1 downto 0);
+        sd_wr          : out std_logic_vector( 1 downto 0);
+        sd_ack         : in  std_logic;
+        sd_buff_addr   : in  std_logic_vector( 8 downto 0);
+        sd_dout        : in  std_logic_vector( 7 downto 0);
+        sd_din         : out std_logic_vector( 7 downto 0);
+        sd_dout_strobe : in  std_logic;
+        drive_led      : out std_logic;
+        disk_info      : out std_logic_vector(23 downto 0);
+        ext_mode       : in  std_logic;
+        ext_drive      : in  std_logic;
+        ext_lba        : in  std_logic_vector(31 downto 0);
+        ext_rd         : in  std_logic;
+        ext_wr         : in  std_logic;
+        ext_busy       : out std_logic;
+        ext_addr       : in  std_logic_vector( 8 downto 0);
+        ext_din        : in  std_logic_vector( 7 downto 0);
+        ext_we         : in  std_logic;
+        ext_q          : out std_logic_vector( 7 downto 0)
+    );
+end component;
+
+component i8271 is
+    port (
+        clk         : in  std_logic;
+        ce4m        : in  std_logic;
+        reset       : in  std_logic;
+        cpu_ce      : in  std_logic;
+        cpu_sel     : in  std_logic;
+        cpu_rw      : in  std_logic;
+        cpu_addr    : in  std_logic_vector( 2 downto 0);
+        cpu_din     : in  std_logic_vector( 7 downto 0);
+        cpu_dout    : out std_logic_vector( 7 downto 0);
+        nmi         : out std_logic;
+        img_mounted : in  std_logic_vector( 1 downto 0);
+        img_size    : in  std_logic_vector(31 downto 0);
+        ext_drive   : out std_logic;
+        ext_lba     : out std_logic_vector(31 downto 0);
+        ext_rd      : out std_logic;
+        ext_wr      : out std_logic;
+        ext_busy    : in  std_logic;
+        buf_addr    : out std_logic_vector( 8 downto 0);
+        buf_din     : out std_logic_vector( 7 downto 0);
+        buf_we      : out std_logic;
+        buf_q       : in  std_logic_vector( 7 downto 0);
+        drive_led   : out std_logic;
+        seek_tog    : out std_logic;
+        seek_n      : out std_logic_vector( 6 downto 0);
+        disk_info   : out std_logic_vector(23 downto 0)
+    );
+end component;
+
+signal fdc_enable       :   std_logic;   -- 1770 registers
+signal fdcon_enable     :   std_logic;   -- the drive control latch
+signal i8271_enable     :   std_logic;
+signal i8271_active     :   std_logic;
+signal fdc_do           :   std_logic_vector(7 downto 0);
+signal i8271_do         :   std_logic_vector(7 downto 0);
+signal fdc_irq          :   std_logic;
+signal fdc_drq          :   std_logic;
+signal i8271_nmi        :   std_logic;
+signal fdc_led          :   std_logic;
+signal i8271_led        :   std_logic;
+signal floppy_drive     :   std_logic_vector(1 downto 0);
+signal floppy_side      :   std_logic;
+signal floppy_reset     :   std_logic;
+signal x_drive          :   std_logic;
+signal x_lba            :   std_logic_vector(31 downto 0);
+signal x_rd             :   std_logic;
+signal x_wr             :   std_logic;
+signal x_busy           :   std_logic;
+signal x_addr           :   std_logic_vector(8 downto 0);
+signal x_din            :   std_logic_vector(7 downto 0);
+signal x_we             :   std_logic;
+signal x_q              :   std_logic_vector(7 downto 0);
 
 -- CRTC signals
 signal crtc_clken       :   std_logic;
@@ -2410,7 +2532,10 @@ begin
     cpu_mode <= "00"; -- 6502
     cpu_ready <= '1';
     cpu_abort_n <= '1';
-    cpu_nmi_n <= ext_1mhz_nmi_n;
+    -- karabas: KgFdc: the NMI of the 8271, or INTRQ / DRQ of the 1770
+    cpu_nmi_n <= ext_1mhz_nmi_n and not i8271_nmi when KgFdc and i8271_active = '1' else
+                 ext_1mhz_nmi_n and not fdc_irq and not fdc_drq when KgFdc else
+                 ext_1mhz_nmi_n;
     cpu_so_n <= '1';
     cpu_nr_w <= not cpu_r_nw;
 
@@ -2492,7 +2617,7 @@ begin
     -- 0xFEC0 - 0xFEDB = uPD7002 ADC
     -- 0xFEDC - 0xFEDF = SPI SD Card Controller (Master)
     -- 0xFEE0 - 0xFEFF = Tube ULA
-    process(cpu_a,io_sheila,m128_mode,copro_mode,copro_ext,cpu_r_nw,acc_itu)
+    process(cpu_a,io_sheila,m128_mode,copro_mode,copro_ext,cpu_r_nw,acc_itu,i8271_active)
     begin
         -- All regions normally de-selected
         crtc_enable <= '0';
@@ -2512,6 +2637,9 @@ begin
         acccon_enable <= '0';
         intoff_enable <= '0';
         inton_enable  <= '0';
+        fdc_enable    <= '0';  -- karabas: KgFdc
+        fdcon_enable  <= '0';
+        i8271_enable  <= '0';
 
         if io_sheila = '1' then
             case cpu_a(7 downto 5) is
@@ -2547,8 +2675,16 @@ begin
                 when "001" =>
                     -- 0xFE20
                     if cpu_a(4) = '0' then
-                        -- 0xFE20
-                        vidproc_enable <= not cpu_r_nw;
+                        if KgFdc and m128_mode = '1' and cpu_a(3) = '1' then
+                            -- karabas: 0xFE28-0xFE2F 1770 (Master)
+                            fdc_enable <= '1';
+                        elsif KgFdc and m128_mode = '1' and cpu_a(3 downto 2) = "01" then
+                            -- karabas: 0xFE24-0xFE27 drive control (Master)
+                            fdcon_enable <= '1';
+                        else
+                            -- 0xFE20
+                            vidproc_enable <= not cpu_r_nw;
+                        end if;
                     elsif m128_mode = '1' then
                         case cpu_a(3 downto 2) is
                             -- 0xFE30
@@ -2571,6 +2707,18 @@ begin
                 when "011" =>
                     -- 0xFE60
                     user_via_enable <= '1';
+                when "100" =>
+                    -- karabas: 0xFE80 (KgFdc, Model B): the 8271 (FE80-FE9F) or the Acorn 1770
+                    -- interface (FE80 drive control, FE84-FE87 the 1770)
+                    if KgFdc and m128_mode = '0' then
+                        if i8271_active = '1' then
+                            i8271_enable <= '1';
+                        elsif cpu_a(4 downto 2) = "001" then
+                            fdc_enable <= '1';
+                        elsif cpu_a(4 downto 0) = "00000" then
+                            fdcon_enable <= '1';
+                        end if;
+                    end if;
 --              when "101" => adlc_enable <= '1';       -- 0xFEA0
                 when "110" =>
                     -- 0xFEC0
@@ -2637,6 +2785,8 @@ begin
         spisd_do       when spisd_enable = '1' else
         split_rom_slot when split_rom_slot_enable = '1' else
         split_rom_page when split_rom_page_enable = '1' else
+        fdc_do         when fdc_enable = '1' and KgFdc else      -- karabas
+        i8271_do       when i8271_enable = '1' and KgFdc else    -- karabas
         -- Optional peripherals
         sid_do         when sid_enable = '1' and IncludeSid else
         m5k_do         when io_jim = '1' and IncludeMusic5000 and m5k_do_oel = '0' else
@@ -2651,6 +2801,126 @@ begin
 
     cpu_irq_n <= not (acia_irq or (not ext_1mhz_irq_n) or (not sys_via_irq_n) or (not user_via_irq_n) or acc_irr) when m128_mode = '1' else
                  not (acia_irq or (not ext_1mhz_irq_n) or (not sys_via_irq_n) or (not user_via_irq_n));
+--------------------------------------------------------
+-- karabas: disc controllers (KgFdc), from Welsh71/BBCMicro.Alternate_MiSTer
+--------------------------------------------------------
+
+    GenFdc: if KgFdc generate
+    begin
+        i8271_active <= fdc_8271 and not m128_mode;
+
+        -- the drive control latch (Master FE24, Model B Acorn 1770 FE80; bits from MAME / the DDFS
+        -- schematic): drive select 0 / 1 (low active to the 1770 here), side, reset of the 1770
+        process(clock_48, reset_n)
+        begin
+            if reset_n = '0' then
+                floppy_drive <= "11";
+                floppy_side  <= '0';
+                floppy_reset <= '0';
+            elsif rising_edge(clock_48) then
+                if cpu_clken = '1' and fdcon_enable = '1' and cpu_r_nw = '0' then
+                    floppy_drive <= not cpu_do(1) & not cpu_do(0);
+                    if m128_mode = '1' then
+                        floppy_reset <= cpu_do(2);
+                        floppy_side  <= not cpu_do(4);
+                    else
+                        floppy_reset <= cpu_do(5);
+                        floppy_side  <= not cpu_do(2);
+                    end if;
+                end if;
+            end if;
+        end process;
+
+        fdc : fdc1772
+            port map (
+                clksys         => clock_48,
+                clkcpu         => clock_48,
+                clk8m_en       => mhz4_clken,
+                floppy_drive   => floppy_drive,
+                floppy_side    => floppy_side,
+                floppy_reset   => floppy_reset,
+                floppy_step    => open,
+                floppy_motor   => '1',
+                floppy_ready   => open,
+                irq            => fdc_irq,
+                drq            => fdc_drq,
+                cpu_addr       => cpu_a(1 downto 0),
+                cpu_sel        => fdc_enable,
+                cpu_rw         => cpu_r_nw,
+                cpu_din        => cpu_do,
+                cpu_dout       => fdc_do,
+                img_mounted    => img_mounted,
+                img_wp         => img_wp,
+                img_size       => img_size,
+                sd_lba         => sd_lba,
+                sd_rd          => sd_rd,
+                sd_wr          => sd_wr,
+                sd_ack         => sd_ack,
+                sd_buff_addr   => sd_buff_addr,
+                sd_dout        => sd_dout,
+                sd_din         => sd_din,
+                sd_dout_strobe => sd_dout_strobe,
+                drive_led      => fdc_led,
+                disk_info      => open,
+                ext_mode       => i8271_active,
+                ext_drive      => x_drive,
+                ext_lba        => x_lba,
+                ext_rd         => x_rd,
+                ext_wr         => x_wr,
+                ext_busy       => x_busy,
+                ext_addr       => x_addr,
+                ext_din        => x_din,
+                ext_we         => x_we,
+                ext_q          => x_q
+            );
+
+        fdc8271 : i8271
+            port map (
+                clk         => clock_48,
+                ce4m        => mhz4_clken,
+                reset       => not reset_n,
+                cpu_ce      => cpu_clken,
+                cpu_sel     => i8271_enable,
+                cpu_rw      => cpu_r_nw,
+                cpu_addr    => cpu_a(2 downto 0),
+                cpu_din     => cpu_do,
+                cpu_dout    => i8271_do,
+                nmi         => i8271_nmi,
+                img_mounted => img_mounted,
+                img_size    => img_size,
+                ext_drive   => x_drive,
+                ext_lba     => x_lba,
+                ext_rd      => x_rd,
+                ext_wr      => x_wr,
+                ext_busy    => x_busy,
+                buf_addr    => x_addr,
+                buf_din     => x_din,
+                buf_we      => x_we,
+                buf_q       => x_q,
+                drive_led   => i8271_led,
+                seek_tog    => open,
+                seek_n      => open,
+                disk_info   => open
+            );
+
+        floppy_led <= i8271_led when i8271_active = '1' else fdc_led;
+    end generate;
+
+    GenNoFdc: if not KgFdc generate
+    begin
+        i8271_active <= '0';
+        fdc_do       <= (others => '1');
+        i8271_do     <= (others => '1');
+        fdc_irq      <= '0';
+        fdc_drq      <= '0';
+        i8271_nmi    <= '0';
+        sd_lba       <= (others => '0');
+        sd_rd        <= "00";
+        sd_wr        <= "00";
+        sd_din       <= (others => '0');
+        floppy_led   <= '0';
+    end generate;
+
     -- SRAM bus
 
     -- Synchronous outputs to External Memory

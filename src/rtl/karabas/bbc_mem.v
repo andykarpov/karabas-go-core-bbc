@@ -8,11 +8,15 @@
  the map in the core above its "SRAM bus" process: 0x00000-0x3FFFF ROM, 0x40000-0x7FFFF RAM), and the
  loader of the ROMs of the .kg (link v2 LOAD kind 0, ld_*).
 
- Banks of 512 KB: the byte address is { bank, ext_A }, bank = { mmfs2, m128_mode } (bbc_roms.sh):
-   0x000000 Model B, MMFS     0x080000 Master 128, MMFS
-   0x100000 Model B, MMFS2    0x180000 Master 128, MMFS2
- Each bank has its own 256 KB of ROM images and its own RAM: a change of model or filing system
- is a power-on reset of the machine anyway.
+ A bank of 512 KB per model: the byte address is { 0, m128, ext_A } (tools/bbc_roms.sh):
+   0x000000 Model B (ROM images 0x00000-0x3FFFF, RAM above)   0x080000 Master 128 (the same)
+ The filing system ROMs are one copy each at 0x100000 (fs.rom, 16 KB slots), and the ROM slots of
+ the disc filing systems are mapped onto them (as rom_addr of Welsh71/BBCMicro.Alternate_MiSTer):
+   Model B slot 3: DFS 1.20 (8271) / DFS 2.26 (1770) / blank    slot 8: SWMMFS / SWMMFS2 / blank
+   Master  slot 8: DFS 2.24 / blank                               slot 9: MAMMFS / MAMMFS2 / blank
+   fs.rom: 0 SWMMFS, 1 SWMMFS2, 2 DNFS 1.20, 3 DFS 2.26, 4 MAMMFS, 5 MAMMFS2, 6 DFS 2.24 (Master), 7 blank
+ (the upper part of Model B slot 8 that SWMMFS uses as RAM is in the RAM half, ext_A[18] = 1: not
+ mapped). A change of model or filing system is a power-on reset of the machine anyway.
 
  The core bus is registered in the core on clk (48 MHz) and goes to the pins through one level of
  logic (lanes, the loader mux). The core latches the read data at the end of its 6-clock memory slot
@@ -27,7 +31,11 @@ module bbc_mem (
 	input wire clk,
 
 	// the core (bbc_micro_core ext_*)
-	input wire [1:0] bank,
+	input wire m128,
+	input wire fs_mmfs,           // an MMFS ROM in its slot
+	input wire fs_mmfs2,          // MMFS2 instead of MMFS
+	input wire fs_dfs,            // a DFS ROM in its slot
+	input wire fdc_8271,          // Model B: DFS 1.20 (8271), else DFS 2.26 (1770)
 	input wire [18:0] ext_a,
 	input wire ext_ncs,
 	input wire ext_noe,
@@ -72,7 +80,34 @@ end
 
 // ---------------------------------------------------------------- the bus
 
-wire [20:0] a = loading ? l_addr : { bank, ext_a };
+// the filing system ROM slots
+wire [3:0] slot = ext_a[17:14];
+reg [2:0] fs_slot;
+reg fs_map;
+always @* begin
+	fs_map = 1'b0;
+	fs_slot = 3'd7;
+	if (!ext_a[18]) begin
+		if (!m128 && slot == 4'd3) begin
+			fs_map = 1'b1;
+			fs_slot = !fs_dfs ? 3'd7 : fdc_8271 ? 3'd2 : 3'd3;
+		end
+		else if (!m128 && slot == 4'd8) begin
+			fs_map = 1'b1;
+			fs_slot = !fs_mmfs ? 3'd7 : fs_mmfs2 ? 3'd1 : 3'd0;
+		end
+		else if (m128 && slot == 4'd8) begin
+			fs_map = 1'b1;
+			fs_slot = fs_dfs ? 3'd6 : 3'd7;
+		end
+		else if (m128 && slot == 4'd9) begin
+			fs_map = 1'b1;
+			fs_slot = !fs_mmfs ? 3'd7 : fs_mmfs2 ? 3'd5 : 3'd4;
+		end
+	end
+end
+
+wire [20:0] a = loading ? l_addr : fs_map ? { 4'b1000, fs_slot, ext_a[13:0] } : { 1'b0, m128, ext_a };
 wire lane = a[0];
 wire rd = !loading && !ext_ncs && !ext_noe;
 wire wr = loading ? l_we : (!ext_ncs && !ext_nwe);

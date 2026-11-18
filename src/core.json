@@ -1,7 +1,7 @@
 {
     "id": "bbc",
     "name": "BBC Micro",
-    "build": "26111820",
+    "build": "26111821",
     "visible": true,
     "type": "osd",
     "order": 29,
@@ -9,30 +9,45 @@
     "rtc_mode": 0,
     "roms": [
         {
-            "filename": "roms/kg/beeb_mmfs.rom",
+            "filename": "roms/kg/beeb.rom",
             "address": 0
         },
         {
-            "filename": "roms/kg/master_mmfs.rom",
+            "filename": "roms/kg/master.rom",
             "address": 524288
         },
         {
-            "filename": "roms/kg/beeb_mmfs2.rom",
+            "filename": "roms/kg/fs.rom",
             "address": 1048576
-        },
-        {
-            "filename": "roms/kg/master_mmfs2.rom",
-            "address": 1572864
         }
     ],
     "boards": {
         "minig": {
             "link": 2,
-            "build": "26111820",
+            "build": "26111821",
             "bitstream": "karabas_minig.bin"
         }
     },
     "osd": [
+        {
+            "type": "F",
+            "name": "Drive 0",
+            "slot": 0,
+            "extensions": ".ssd,.dsd",
+            "dir": "/bbc",
+            "hotkey": "Menu+F1"
+        },
+        {
+            "type": "F",
+            "name": "Drive 1",
+            "slot": 1,
+            "extensions": ".ssd,.dsd",
+            "dir": "/bbc",
+            "hotkey": "Menu+F2"
+        },
+        {
+            "type": "-"
+        },
         {
             "type": "S",
             "name": "Model",
@@ -46,13 +61,26 @@
         },
         {
             "type": "S",
-            "name": "SD2 FS",
+            "name": "Disc FS",
             "options": [
                 "MMFS",
-                "MMFS2"
+                "MMFS2",
+                "DFS",
+                "MMFS+DFS",
+                "MMFS2+DFS"
+            ],
+            "default": 3,
+            "index": 1
+        },
+        {
+            "type": "S",
+            "name": "B FDC",
+            "options": [
+                "8271",
+                "1770"
             ],
             "default": 0,
-            "index": 1
+            "index": 2
         },
         {
             "type": "S",
@@ -62,7 +90,7 @@
                 "65C02"
             ],
             "default": 0,
-            "index": 2
+            "index": 3
         },
         {
             "type": "-"
@@ -71,7 +99,7 @@
             "type": "T",
             "name": "Reset",
             "hotkey": "Menu+F12",
-            "index": 3
+            "index": 4
         }
     ]
 }
