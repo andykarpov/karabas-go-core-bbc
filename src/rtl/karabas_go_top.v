@@ -197,8 +197,8 @@ kg_sync #(.W(1), .STAGES(2), .INIT(1'b1)) sync_areset_27 (.clk(clk_27), .d(arese
 // the clock of the SDRAM: the inverse of clk_48 (bbc_tape_sdram)
 ODDR2 oddr_sdr_clk (.Q(SDR_CLK), .C0(clk_48), .C1(~clk_48), .CE(1'b1), .D0(1'b0), .D1(1'b1), .R(1'b0), .S(1'b0));
 
-// the pixel clock of the VGA DAC
-ODDR2 oddr_v_clk (.Q(V_CLK), .C0(clk_27), .C1(~clk_27), .CE(1'b1), .D0(1'b1), .D1(1'b0), .R(1'b0), .S(1'b0));
+// the pixel clock of the VGA DAC, inverted: the DAC takes the pixel on the rising V_CLK, the middle of the pixel
+ODDR2 oddr_v_clk (.Q(V_CLK), .C0(clk_27), .C1(~clk_27), .CE(1'b1), .D0(1'b0), .D1(1'b1), .R(1'b0), .S(1'b0));
 
 // ------------------------------------------------------------------ MCU
 
